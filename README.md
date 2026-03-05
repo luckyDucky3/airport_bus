@@ -45,7 +45,8 @@ dotnet run --project BusApi/BusApi.csproj
 
 Что делает:
 - Читает таблицу автобусов.
-- Возвращает текущее состояние каждого автобуса: `status`, `locationNode`, `currentTripId`, `capacity`.
+- Возвращает текущее состояние каждого автобуса: `status`, `locationNode`, `capacity`.
+- `status` в API вычисляется из поля БД `state` (`free/loading/moving` -> `free/busy/busy`).
 
 Ответ:
 - `200 OK` и массив `BusVehicle`.
@@ -167,9 +168,9 @@ REST API не создает jobs/trips напрямую, а только ото
 - создается `BusJob` со статусом `running` (или `done`, если `totalPassengers = 0`)
 - вычисляется `tripsPlanned = ceil(totalPassengers / bus.capacity)`
 - создаются `BusTrip`:
-  - первый trip: `running`
-  - остальные: `queued`
-- автобус переводится в `busy`, заполняется `currentTripId`.
+  - первый trip: `running` (состояние БД `moving_to_pickup`)
+  - остальные: `queued` (состояние БД `created`)
+- автобус переводится в состояние БД `moving` (в API это `busy`).
 
 ### Формирование `passengerIds`
 
@@ -181,7 +182,69 @@ REST API не создает jobs/trips напрямую, а только ото
 - Ошибки парсинга/валидации сообщения логируются, сообщение не приводит к падению сервиса.
 - Ошибки подключения к Kafka логируются; consumer продолжает попытки переподключения.
 
-## Docker Compose
+## Текущая схема БД
+
+Ниже фактическая схема, на которую сейчас настроен EF Core.
+
+```sql
+create table buses (
+  bus_id        text primary key,
+  capacity      int not null check (capacity > 0),
+  state         text not null check (state in ('free','loading','moving')),
+  location_node text not null,
+  route_id      uuid,
+  updated_at    timestamptz not null
+);
+
+create table bus_jobs (
+  task_id                text primary key,
+  handling_id            text,
+  plane_id               text not null,
+  flight_id              text not null,
+  status                 text not null check (status in ('queued','running','done','rejected')),
+  bus_id                 text,
+  from_node              text not null,
+  to_node                text not null,
+  trip_duration_minutes  int not null,
+  trips_planned          int not null,
+  trips_done             int not null,
+  total_passengers       int not null,
+  reject_reason          text,
+  created_at             timestamptz not null,
+  updated_at             timestamptz not null
+);
+
+create table bus_trips (
+  trip_id      uuid primary key,
+  task_id      text not null references bus_jobs(task_id) on delete cascade,
+  bus_id       text not null,
+  flight_id    text not null,
+  plane_id     text not null,
+  status       text not null check (status in ('created','moving_to_pickup','loading','moving_to_plane','done')),
+  from_node    text not null,
+  to_node      text not null,
+  route_id     uuid,
+  created_at   timestamptz not null,
+  updated_at   timestamptz not null,
+  done_at      timestamptz
+);
+
+create table bus_trip_passengers (
+  trip_id      uuid not null references bus_trips(trip_id) on delete cascade,
+  passenger_id text not null,
+  primary key (trip_id, passenger_id)
+);
+
+create table processed_events (
+  event_id     uuid primary key,
+  processed_at timestamptz not null
+);
+```
+
+Примечание по совместимости API:
+- API-статусы автобусов: `free|busy|offline` маппятся из `buses.state`.
+- API-статусы trips: `queued|running|done|failed` маппятся из `bus_trips.status`.
+- `passengerIds` в API формируются из таблицы `bus_trip_passengers`.
 
 В проекте есть `docker-compose.yml` для PostgreSQL.
 
