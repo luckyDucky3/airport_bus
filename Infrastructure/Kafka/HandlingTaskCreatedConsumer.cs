@@ -125,7 +125,7 @@ public sealed class HandlingTaskCreatedConsumer(
 
         var now = DateTimeOffset.UtcNow;
         var bus = await db.Buses
-            .Where(x => x.Status == StatusValues.VehicleFree)
+            .Where(x => x.State == StatusValues.BusStateFree)
             .OrderBy(x => x.UpdatedAt)
             .FirstOrDefaultAsync(ct);
 
@@ -175,24 +175,25 @@ public sealed class HandlingTaskCreatedConsumer(
                 var count = Math.Min(bus.Capacity, msg.TotalPassengers - offset);
                 var segment = passengers.Skip(offset).Take(count).ToArray();
                 var isFirst = i == 0;
+                var tripId = Guid.NewGuid();
 
                 var trip = new BusTripEntity
                 {
-                    TripId = Guid.NewGuid(),
+                    TripId = tripId,
                     TaskId = msg.TaskId,
                     BusId = bus.BusId,
                     PlaneId = msg.PlaneId,
                     FlightId = msg.FlightId,
-                    Status = isFirst ? StatusValues.TripRunning : StatusValues.TripQueued,
+                    Status = isFirst ? StatusValues.TripStateMovingToPickup : StatusValues.TripStateCreated,
                     FromNode = msg.FromNode,
                     ToNode = msg.ToNode,
-                    PassengerIds = segment,
-                    PassengerCount = segment.Length,
-                    DurationMinutes = msg.TripDurationMinutes,
-                    RemainingMinutes = isFirst ? msg.TripDurationMinutes : msg.TripDurationMinutes,
-                    StartSimTime = isFirst ? now : null,
                     CreatedAt = now,
-                    UpdatedAt = now
+                    UpdatedAt = now,
+                    Passengers = segment.Select(x => new BusTripPassengerEntity
+                    {
+                        TripId = tripId,
+                        PassengerId = x
+                    }).ToList()
                 };
 
                 createdTrips.Add(trip);
@@ -200,8 +201,7 @@ public sealed class HandlingTaskCreatedConsumer(
 
             db.Trips.AddRange(createdTrips);
 
-            bus.Status = StatusValues.VehicleBusy;
-            bus.CurrentTripId = createdTrips[0].TripId;
+            bus.State = StatusValues.BusStateMoving;
             bus.LocationNode = msg.FromNode;
             bus.UpdatedAt = now;
         }

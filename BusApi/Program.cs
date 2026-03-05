@@ -13,7 +13,10 @@ builder.Services.Configure<KafkaOptions>(builder.Configuration.GetSection("Kafka
 builder.Services.AddDbContext<BusDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
-builder.Services.AddHostedService<HandlingTaskCreatedConsumer>();
+if (builder.Configuration.GetValue<bool>("Kafka:Enabled"))
+{
+    builder.Services.AddHostedService<HandlingTaskCreatedConsumer>();
+}
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -81,7 +84,7 @@ app.MapPost("/v1/buses/init", async (InitBusRequest request, BusDbContext db, Ca
     {
         BusId = request.BusId,
         Capacity = request.Capacity,
-        Status = StatusValues.VehicleFree,
+        State = StatusValues.BusStateFree,
         LocationNode = request.LocationNode,
         UpdatedAt = now
     };
@@ -133,16 +136,23 @@ app.MapGet("/v1/bus/jobs/{taskId}", async (string taskId, BusDbContext db, Cance
 
 app.MapGet("/v1/bus/trips", async (string? status, string? flightId, string? planeId, string? busId, BusDbContext db, CancellationToken ct) =>
 {
-    if (!string.IsNullOrWhiteSpace(status) && !StatusValues.TripStatuses.Contains(status))
+    if (!string.IsNullOrWhiteSpace(status) && !StatusValues.ApiTripStatuses.Contains(status))
     {
         return Results.BadRequest(DtoMapper.ValidationError("invalid status"));
     }
 
-    var query = db.Trips.AsNoTracking().AsQueryable();
+    var query = db.Trips
+        .AsNoTracking()
+        .Include(x => x.Task)
+        .Include(x => x.Passengers)
+        .AsQueryable();
 
     if (!string.IsNullOrWhiteSpace(status))
     {
-        query = query.Where(x => x.Status == status);
+        var dbStatuses = DtoMapper.MapApiTripStatusToStates(status);
+        query = dbStatuses.Count == 0
+            ? query.Where(_ => false)
+            : query.Where(x => dbStatuses.Contains(x.Status));
     }
 
     if (!string.IsNullOrWhiteSpace(flightId))
@@ -166,7 +176,11 @@ app.MapGet("/v1/bus/trips", async (string? status, string? flightId, string? pla
 
 app.MapGet("/v1/bus/trips/{tripId:guid}", async (Guid tripId, BusDbContext db, CancellationToken ct) =>
 {
-    var trip = await db.Trips.AsNoTracking().FirstOrDefaultAsync(x => x.TripId == tripId, ct);
+    var trip = await db.Trips
+        .AsNoTracking()
+        .Include(x => x.Task)
+        .Include(x => x.Passengers)
+        .FirstOrDefaultAsync(x => x.TripId == tripId, ct);
     if (trip is null)
     {
         return Results.NotFound(DtoMapper.NotFound("Trip not found"));
