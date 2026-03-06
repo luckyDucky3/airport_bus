@@ -13,6 +13,7 @@ docker compose up -d --build postgres bus
 2. Bus API будет доступен по адресам:
 - `http://localhost:8011/health`
 - `http://localhost:8011/api/bus/health`
+- И по остальным ручкам соответственно
 
 3. Kafka в compose сейчас включена для `bus` (`Kafka__Enabled=true`), можно изменить, чтоб для локального старта брокер был не обязателен.
 
