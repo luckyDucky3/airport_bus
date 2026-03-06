@@ -2,6 +2,8 @@ using Services.Contracts;
 using Models.Domain;
 using Infrastructure.Persistence;
 using Infrastructure.Kafka;
+using Infrastructure.Integrations;
+using Infrastructure.Workers;
 using Services.Mapping;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
@@ -9,14 +11,31 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<KafkaOptions>(builder.Configuration.GetSection("Kafka"));
+builder.Services.Configure<PassengersOptions>(builder.Configuration.GetSection("Dependencies:Passengers"));
+builder.Services.Configure<GroundOptions>(builder.Configuration.GetSection("Dependencies:Ground"));
 
 builder.Services.AddDbContext<BusDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
+builder.Services.AddHttpClient<IPassengersClient, PassengersClient>((sp, client) =>
+{
+    var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<PassengersOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+});
+
+builder.Services.AddHttpClient<IGroundClient, GroundClient>((sp, client) =>
+{
+    var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GroundOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+});
+
 if (builder.Configuration.GetValue<bool>("Kafka:Enabled"))
 {
     builder.Services.AddHostedService<HandlingTaskCreatedConsumer>();
+    builder.Services.AddHostedService<SimTimeTickConsumer>();
+    builder.Services.AddHostedService<OutboxPublisherWorker>();
 }
+builder.Services.AddHostedService<QueuedJobsWorker>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -49,13 +68,21 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.MapGet("/v1/buses", async (BusDbContext db, CancellationToken ct) =>
 {
+    var runningTrips = await db.Trips
+        .AsNoTracking()
+        .Where(x => x.Status == StatusValues.TripStateMovingToPickup || x.Status == StatusValues.TripStateLoading || x.Status == StatusValues.TripStateMovingToPlane)
+        .Select(x => new { x.BusId, x.TripId })
+        .ToListAsync(ct);
+    var currentTripMap = runningTrips
+        .GroupBy(x => x.BusId)
+        .ToDictionary(x => x.Key, x => (Guid?)x.First().TripId);
+
     var buses = await db.Buses
         .AsNoTracking()
         .OrderBy(x => x.BusId)
-        .Select(x => x.ToDto())
         .ToListAsync(ct);
 
-    return Results.Ok(buses);
+    return Results.Ok(buses.Select(x => x.ToDto(currentTripMap.GetValueOrDefault(x.BusId))));
 });
 
 app.MapPost("/v1/buses/init", async (InitBusRequest request, BusDbContext db, CancellationToken ct) =>
@@ -147,6 +174,7 @@ app.MapGet("/v1/bus/trips", async (string? status, string? flightId, string? pla
         .AsNoTracking()
         .Include(x => x.Task)
         .Include(x => x.Passengers)
+        .Include(x => x.Runtime)
         .AsQueryable();
 
     if (!string.IsNullOrWhiteSpace(status))
@@ -182,6 +210,7 @@ app.MapGet("/v1/bus/trips/{tripId:guid}", async (Guid tripId, BusDbContext db, C
         .AsNoTracking()
         .Include(x => x.Task)
         .Include(x => x.Passengers)
+        .Include(x => x.Runtime)
         .FirstOrDefaultAsync(x => x.TripId == tripId, ct);
     if (trip is null)
     {

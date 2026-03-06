@@ -45,5 +45,7 @@ public class BusJobEntity
     public DateTimeOffset UpdatedAt { get; set; }
 
     public List<BusTripEntity> Trips { get; set; } = [];
+
+    public BusJobRuntimeEntity? Runtime { get; set; }
 }
 

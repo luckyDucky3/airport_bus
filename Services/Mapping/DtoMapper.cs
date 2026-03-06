@@ -6,12 +6,15 @@ namespace Services.Mapping;
 public static class DtoMapper
 {
     public static BusVehicleDto ToDto(this BusVehicleEntity entity) =>
+        ToDto(entity, null);
+
+    public static BusVehicleDto ToDto(this BusVehicleEntity entity, Guid? currentTripId) =>
         new(
             entity.BusId,
             entity.Capacity,
             MapBusStateToApiStatus(entity.State),
             entity.LocationNode,
-            null,
+            currentTripId,
             entity.RouteId,
             entity.UpdatedAt
         );
@@ -43,6 +46,9 @@ public static class DtoMapper
         var apiStatus = MapTripStateToApiStatus(entity.Status);
         var duration = entity.Task?.TripDurationMinutes ?? 1;
         var isDone = apiStatus == StatusValues.ApiTripDone;
+        var remaining = entity.Runtime?.RemainingMinutes ?? (isDone ? 0 : duration);
+        var startSimTime = entity.Runtime?.StartSimTime ?? (apiStatus == StatusValues.ApiTripQueued ? null : entity.CreatedAt);
+        var finishSimTime = entity.Runtime?.FinishSimTime ?? entity.DoneAt;
 
         return new(
             entity.TripId,
@@ -57,9 +63,9 @@ public static class DtoMapper
             passengerIds,
             passengerIds.Count,
             duration,
-            isDone ? 0 : duration,
-            apiStatus == StatusValues.ApiTripQueued ? null : entity.CreatedAt,
-            entity.DoneAt,
+            remaining,
+            startSimTime,
+            finishSimTime,
             entity.CreatedAt,
             entity.UpdatedAt
         );

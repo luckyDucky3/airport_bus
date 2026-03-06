@@ -10,6 +10,10 @@ public sealed class BusDbContext(DbContextOptions<BusDbContext> options) : DbCon
     public DbSet<BusTripEntity> Trips => Set<BusTripEntity>();
     public DbSet<BusTripPassengerEntity> TripPassengers => Set<BusTripPassengerEntity>();
     public DbSet<ProcessedEventEntity> ProcessedEvents => Set<ProcessedEventEntity>();
+    public DbSet<OutboxEventEntity> OutboxEvents => Set<OutboxEventEntity>();
+    public DbSet<BusRuntimeEntity> Runtime => Set<BusRuntimeEntity>();
+    public DbSet<BusTripRuntimeEntity> TripRuntime => Set<BusTripRuntimeEntity>();
+    public DbSet<BusJobRuntimeEntity> JobRuntime => Set<BusJobRuntimeEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -44,6 +48,11 @@ public sealed class BusDbContext(DbContextOptions<BusDbContext> options) : DbCon
             entity.HasIndex(x => x.Status);
             entity.HasIndex(x => x.FlightId);
             entity.HasIndex(x => x.PlaneId);
+
+            entity.HasOne(x => x.Runtime)
+                .WithOne(x => x.Job)
+                .HasForeignKey<BusJobRuntimeEntity>(x => x.TaskId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<BusTripEntity>(entity =>
@@ -76,6 +85,11 @@ public sealed class BusDbContext(DbContextOptions<BusDbContext> options) : DbCon
                 .WithOne(x => x.Trip)
                 .HasForeignKey(x => x.TripId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Runtime)
+                .WithOne(x => x.Trip)
+                .HasForeignKey<BusTripRuntimeEntity>(x => x.TripId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<BusTripPassengerEntity>(entity =>
@@ -92,6 +106,49 @@ public sealed class BusDbContext(DbContextOptions<BusDbContext> options) : DbCon
             entity.HasKey(x => x.EventId);
             entity.Property(x => x.EventId).HasColumnName("event_id");
             entity.Property(x => x.ProcessedAt).IsRequired().HasColumnName("processed_at");
+        });
+
+        modelBuilder.Entity<OutboxEventEntity>(entity =>
+        {
+            entity.ToTable("outbox_events");
+            entity.HasKey(x => x.EventId);
+            entity.Property(x => x.EventId).HasColumnName("event_id");
+            entity.Property(x => x.Topic).IsRequired().HasMaxLength(128).HasColumnName("topic");
+            entity.Property(x => x.EventType).IsRequired().HasMaxLength(128).HasColumnName("event_type");
+            entity.Property(x => x.EventKey).IsRequired().HasMaxLength(256).HasColumnName("event_key");
+            entity.Property(x => x.PayloadJson).IsRequired().HasColumnName("payload_json");
+            entity.Property(x => x.CreatedAt).IsRequired().HasColumnName("created_at");
+            entity.Property(x => x.PublishedAt).HasColumnName("published_at");
+            entity.Property(x => x.PublishAttempts).IsRequired().HasColumnName("publish_attempts");
+            entity.HasIndex(x => x.PublishedAt);
+        });
+
+        modelBuilder.Entity<BusRuntimeEntity>(entity =>
+        {
+            entity.ToTable("bus_runtime");
+            entity.HasKey(x => x.RuntimeId);
+            entity.Property(x => x.RuntimeId).HasColumnName("runtime_id").HasMaxLength(32);
+            entity.Property(x => x.LastSimTime).HasColumnName("last_sim_time");
+            entity.Property(x => x.UpdatedAt).HasColumnName("updated_at").IsRequired();
+        });
+
+        modelBuilder.Entity<BusTripRuntimeEntity>(entity =>
+        {
+            entity.ToTable("bus_trip_runtime");
+            entity.HasKey(x => x.TripId);
+            entity.Property(x => x.TripId).HasColumnName("trip_id");
+            entity.Property(x => x.RemainingMinutes).HasColumnName("remaining_minutes").IsRequired();
+            entity.Property(x => x.StartSimTime).HasColumnName("start_sim_time");
+            entity.Property(x => x.FinishSimTime).HasColumnName("finish_sim_time");
+        });
+
+        modelBuilder.Entity<BusJobRuntimeEntity>(entity =>
+        {
+            entity.ToTable("bus_job_runtime");
+            entity.HasKey(x => x.TaskId);
+            entity.Property(x => x.TaskId).HasColumnName("task_id").HasMaxLength(256);
+            entity.Property(x => x.PickupCompleted).HasColumnName("pickup_completed").IsRequired();
+            entity.Property(x => x.UpdatedAt).HasColumnName("updated_at").IsRequired();
         });
     }
 }

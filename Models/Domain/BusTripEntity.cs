@@ -39,5 +39,7 @@ public class BusTripEntity
     public BusJobEntity? Task { get; set; }
 
     public List<BusTripPassengerEntity> Passengers { get; set; } = [];
+
+    public BusTripRuntimeEntity? Runtime { get; set; }
 }
 
