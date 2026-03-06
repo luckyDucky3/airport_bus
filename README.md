@@ -14,7 +14,7 @@ docker compose up -d --build postgres bus
 - `http://localhost:8011/health`
 - `http://localhost:8011/api/bus/health`
 
-3. Kafka в compose сейчас отключена для `bus` (`Kafka__Enabled=false`), поэтому для локального старта брокер не обязателен.
+3. Kafka в compose сейчас включена для `bus` (`Kafka__Enabled=true`), можно изменить, чтоб для локального старта брокер был не обязателен.
 
 4. Для запуска без Docker (опционально) проверьте `BusApi/appsettings.json`:
 - `ConnectionStrings:Postgres`
