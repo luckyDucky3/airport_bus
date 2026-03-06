@@ -11,7 +11,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8000
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=airport_bus;Username=postgres;Password=postgres
-      Kafka__Enabled: "false"
+      Kafka__Enabled: "true"
     depends_on:
       postgres:
         condition: service_healthy
