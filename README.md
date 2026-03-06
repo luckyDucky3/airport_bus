@@ -261,7 +261,47 @@ create table processed_events (
   event_id     uuid primary key,
   processed_at timestamptz not null
 );
+
+create table outbox_events (
+  event_id         uuid primary key,
+  topic            text not null,
+  event_type       text not null,
+  event_key        text not null,
+  payload_json     text not null,
+  created_at       timestamptz not null,
+  published_at     timestamptz,
+  publish_attempts int not null default 0
+);
+
+create table bus_runtime (
+  runtime_id    text primary key,
+  last_sim_time timestamptz,
+  updated_at    timestamptz not null
+);
+
+create table bus_trip_runtime (
+  trip_id            uuid primary key references bus_trips(trip_id) on delete cascade,
+  remaining_minutes  int not null,
+  start_sim_time     timestamptz,
+  finish_sim_time    timestamptz
+);
+
+create table bus_job_runtime (
+  task_id          text primary key references bus_jobs(task_id) on delete cascade,
+  pickup_completed boolean not null default false,
+  updated_at       timestamptz not null
+);
 ```
+
+Новые таблицы:
+- `outbox_events`:
+- Техническая таблица для гарантированной публикации исходящих Kafka-событий (outbox pattern).
+- `bus_runtime`:
+- Глобальное runtime-состояние bus-сервиса (например, `last_sim_time` для дедупликации tick).
+- `bus_trip_runtime`:
+- Runtime-поля trip: `remaining_minutes`, `start_sim_time`, `finish_sim_time`.
+- `bus_job_runtime`:
+- Runtime-флаг job `pickup_completed` (что новых пассажиров по job больше нет).
 
 Примечание по совместимости API:
 - API-статусы автобусов: `free|busy|offline` маппятся из `buses.state`.
