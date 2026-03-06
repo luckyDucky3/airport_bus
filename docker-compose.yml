@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: airport-bus-postgres
+    container_name: bus_db
     restart: unless-stopped
     environment:
       POSTGRES_DB: airport_bus
