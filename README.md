@@ -2,7 +2,7 @@
 
 Сервис `Airport Simulation — Bus` на ASP.NET Core + EF Core + PostgreSQL + Kafka.
 
-## Запуск
+## Как поднять мой блок
 
 1. Поднимите PostgreSQL:
 
@@ -27,7 +27,7 @@ dotnet run --project BusApi/BusApi.csproj
 - `Services` - DTO контракты и mapping.
 - `BusApi` - HTTP endpoints и композиция зависимостей.
 
-## REST API
+## REST API (Что делает мой блок)
 
 ### `GET /health`
 
