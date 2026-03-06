@@ -1,4 +1,21 @@
 services:
+  bus:
+    build:
+      context: .
+      dockerfile: BusApi/Dockerfile
+    container_name: bus
+    restart: unless-stopped
+    ports:
+      - "8011:8000"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8000
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=airport_bus;Username=postgres;Password=postgres
+      Kafka__Enabled: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
     image: postgres:16
     container_name: bus_db

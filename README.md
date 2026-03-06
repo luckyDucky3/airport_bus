@@ -4,17 +4,23 @@
 
 ## Как поднять мой блок
 
-1. Поднимите PostgreSQL:
+1. Поднимите сервисы через Docker Compose:
 
 ```bash
-docker compose up -d postgres
+docker compose up -d --build postgres bus
 ```
 
-2. Поднимите Kafka (внешним compose/кластером) или Redpanda.
-3. Проверьте `BusApi/appsettings.json`:
+2. Bus API будет доступен по адресам:
+- `http://localhost:8011/health`
+- `http://localhost:8011/api/bus/health`
+
+3. Kafka в compose сейчас отключена для `bus` (`Kafka__Enabled=false`), поэтому для локального старта брокер не обязателен.
+
+4. Для запуска без Docker (опционально) проверьте `BusApi/appsettings.json`:
 - `ConnectionStrings:Postgres`
 - `Kafka:BootstrapServers`
-4. Запустите API:
+
+5. Для запуска без Docker вручную:
 
 ```bash
 dotnet run --project BusApi/BusApi.csproj

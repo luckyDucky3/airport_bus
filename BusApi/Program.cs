@@ -22,6 +22,8 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+app.UsePathBase("/api/bus");
+
 app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>
