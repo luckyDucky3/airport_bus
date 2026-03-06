@@ -20,8 +20,6 @@ docker compose up -d --build postgres bus
 - `ConnectionStrings:Postgres`
 - `Kafka:BootstrapServers`
 
-5. Для запуска без Docker вручную:
-
 ```bash
 dotnet run --project BusApi/BusApi.csproj
 ```
